@@ -1,0 +1,60 @@
+version: '3'
+
+services:
+  db:
+    image: postgres
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+      - TZ="Asia/Taipei"
+    volumes:
+      - opencue-db:/var/lib/postgresql/data
+
+  dbGUI:
+    image: dpage/pgadmin4
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PG_USER}
+      - PGADMIN_DEFAULT_PASSWORD=${PG_PASSWORD}
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    volumes:
+      - pgadmin-data:/root/.pgadmin
+    ports:
+      - "${PG_PORT}:80"
+    depends_on:
+      - db
+
+  flyway:
+    build:
+      context: ./opencue-source
+      dockerfile: ./sandbox/flyway.Dockerfile
+    links:
+      - db
+    depends_on:
+      - db
+    environment:
+      - PGUSER=${DB_USER}
+      - PGPASSWORD=${DB_PASSWORD}
+      - PGDATABASE=${DB_NAME}
+      - PGHOST=db
+      - PGPORT=5432
+      - TZ="Asia/Taipei"
+    command: /opt/scripts/migrate.sh
+
+  cuebot:
+    image: opencue/cuebot:${VER}
+    links:
+      - db
+    ports:
+      - "8443:8443"
+    depends_on:
+      - db
+      - flyway
+    restart: always
+    environment:
+      - CUE_FRAME_LOG_DIR=${LOG_DIR}
+      - TZ="Asia/Taipei"
+    command: --datasource.cue-data-source.jdbc-url=jdbc:postgresql://db/${DB_NAME} --datasource.cue-data-source.username=${DB_USER} --datasource.cucue-data-source.password=${DB_PASSWORD}
+
+volumes:
+  opencue-db:
